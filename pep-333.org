@@ -1,8 +1,10 @@
-* TODO PEP 333 [0%]
-** TODO Abstract
+* TODO PEP 333 [25%]
+** DONE Abstract
+   CLOSED: [2016-12-23 Fri 22:31]
 This document specifies a proposed standard interface between web servers and Python web applications or frameworks, to promote web application portability across a variety of web servers.
 
-** TODO Rationale and Goals
+** DONE Rationale and Goals
+   CLOSED: [2016-12-23 Fri 22:31]
 Python currently boasts a wide variety of web application frameworks, such as Zope, Quixote, Webware, SkunkWeb, PSO, and Twisted Web -- to name just a few [1] . This wide variety of choices can be a problem for new Python users, because generally speaking, their choice of web framework will limit their choice of usable web servers, and vice versa.
 
 By contrast, although Java has just as many web application frameworks available, Java's "servlet" API makes it possible for applications written with any Java web application framework to run in any web server that supports the servlet API.
@@ -36,108 +38,114 @@ In addition to "pure" servers/gateways and applications/frameworks, it is also p
 
 Throughout this specification, we will use the term "a callable" to mean "a function, method, class, or an instance with a __call__ method". It is up to the server, gateway, or application implementing the callable to choose the appropriate implementation technique for their needs. Conversely, a server, gateway, or application that is invoking a callable must not have any dependency on what kind of callable was provided to it. Callables are only to be called, not introspected upon.
 
-The Application/Framework Side
+*** The Application/Framework Side
 The application object is simply a callable object that accepts two arguments. The term "object" should not be misconstrued as requiring an actual object instance: a function, method, class, or instance with a __call__ method are all acceptable for use as an application object. Application objects must be able to be invoked more than once, as virtually all servers/gateways (other than CGI) will make such repeated requests.
 
 (Note: although we refer to it as an "application" object, this should not be construed to mean that application developers will use WSGI as a web programming API! It is assumed that application developers will continue to use existing, high-level framework services to develop their applications. WSGI is a tool for framework and server developers, and is not intended to directly support application developers.)
 
 Here are two example application objects; one is a function, and the other is a class:
 
-def simple_app(environ, start_response):
-    """Simplest possible application object"""
-    status = '200 OK'
-    response_headers = [('Content-type', 'text/plain')]
-    start_response(status, response_headers)
-    return ['Hello world!\n']
+#+BEGIN_SRC python
+  def simple_app(environ, start_response):
+      """Simplest possible application object"""
+      status = '200 OK'
+      response_headers = [('Content-type', 'text/plain')]
+      start_response(status, response_headers)
+      return ['Hello world!\n']
 
 
-class AppClass:
-    """Produce the same output, but using a class
+  class AppClass:
+      """Produce the same output, but using a class
 
-    (Note: 'AppClass' is the "application" here, so calling it
-    returns an instance of 'AppClass', which is then the iterable
-    return value of the "application callable" as required by
-    the spec.
+      (Note: 'AppClass' is the "application" here, so calling it
+      returns an instance of 'AppClass', which is then the iterable
+      return value of the "application callable" as required by
+      the spec.
 
-    If we wanted to use *instances* of 'AppClass' as application
-    objects instead, we would have to implement a '__call__'
-    method, which would be invoked to execute the application,
-    and we would need to create an instance for use by the
-    server or gateway.
-    """
+      If we wanted to use *instances* of 'AppClass' as application
+      objects instead, we would have to implement a '__call__'
+      method, which would be invoked to execute the application,
+      and we would need to create an instance for use by the
+      server or gateway.
+      """
 
-    def __init__(self, environ, start_response):
-        self.environ = environ
-        self.start = start_response
+      def __init__(self, environ, start_response):
+          self.environ = environ
+          self.start = start_response
 
-    def __iter__(self):
-        status = '200 OK'
-        response_headers = [('Content-type', 'text/plain')]
-        self.start(status, response_headers)
-        yield "Hello world!\n"
-The Server/Gateway Side
+      def __iter__(self):
+          status = '200 OK'
+          response_headers = [('Content-type', 'text/plain')]
+          self.start(status, response_headers)
+          yield "Hello world!\n"
+#+END_SRC
+
+*** The Server/Gateway Side
 The server or gateway invokes the application callable once for each request it receives from an HTTP client, that is directed at the application. To illustrate, here is a simple CGI gateway, implemented as a function taking an application object. Note that this simple example has limited error handling, because by default an uncaught exception will be dumped to sys.stderr and logged by the web server.
 
-import os, sys
+#+BEGIN_SRC python
+  import os, sys
 
-def run_with_cgi(application):
+  def run_with_cgi(application):
 
-    environ = dict(os.environ.items())
-    environ['wsgi.input']        = sys.stdin
-    environ['wsgi.errors']       = sys.stderr
-    environ['wsgi.version']      = (1, 0)
-    environ['wsgi.multithread']  = False
-    environ['wsgi.multiprocess'] = True
-    environ['wsgi.run_once']     = True
+      environ = dict(os.environ.items())
+      environ['wsgi.input']        = sys.stdin
+      environ['wsgi.errors']       = sys.stderr
+      environ['wsgi.version']      = (1, 0)
+      environ['wsgi.multithread']  = False
+      environ['wsgi.multiprocess'] = True
+      environ['wsgi.run_once']     = True
 
-    if environ.get('HTTPS', 'off') in ('on', '1'):
-        environ['wsgi.url_scheme'] = 'https'
-    else:
-        environ['wsgi.url_scheme'] = 'http'
+      if environ.get('HTTPS', 'off') in ('on', '1'):
+          environ['wsgi.url_scheme'] = 'https'
+      else:
+          environ['wsgi.url_scheme'] = 'http'
 
-    headers_set = []
-    headers_sent = []
+      headers_set = []
+      headers_sent = []
 
-    def write(data):
-        if not headers_set:
-             raise AssertionError("write() before start_response()")
+      def write(data):
+          if not headers_set:
+               raise AssertionError("write() before start_response()")
 
-        elif not headers_sent:
-             # Before the first output, send the stored headers
-             status, response_headers = headers_sent[:] = headers_set
-             sys.stdout.write('Status: %s\r\n' % status)
-             for header in response_headers:
-                 sys.stdout.write('%s: %s\r\n' % header)
-             sys.stdout.write('\r\n')
+          elif not headers_sent:
+               # Before the first output, send the stored headers
+               status, response_headers = headers_sent[:] = headers_set
+               sys.stdout.write('Status: %s\r\n' % status)
+               for header in response_headers:
+                   sys.stdout.write('%s: %s\r\n' % header)
+               sys.stdout.write('\r\n')
 
-        sys.stdout.write(data)
-        sys.stdout.flush()
+          sys.stdout.write(data)
+          sys.stdout.flush()
 
-    def start_response(status, response_headers, exc_info=None):
-        if exc_info:
-            try:
-                if headers_sent:
-                    # Re-raise original exception if headers sent
-                    raise exc_info[0], exc_info[1], exc_info[2]
-            finally:
-                exc_info = None     # avoid dangling circular ref
-        elif headers_set:
-            raise AssertionError("Headers already set!")
+      def start_response(status, response_headers, exc_info=None):
+          if exc_info:
+              try:
+                  if headers_sent:
+                      # Re-raise original exception if headers sent
+                      raise exc_info[0], exc_info[1], exc_info[2]
+              finally:
+                  exc_info = None     # avoid dangling circular ref
+          elif headers_set:
+              raise AssertionError("Headers already set!")
 
-        headers_set[:] = [status, response_headers]
-        return write
+          headers_set[:] = [status, response_headers]
+          return write
 
-    result = application(environ, start_response)
-    try:
-        for data in result:
-            if data:    # don't send headers until body appears
-                write(data)
-        if not headers_sent:
-            write('')   # send headers now if body was empty
-    finally:
-        if hasattr(result, 'close'):
-            result.close()
-Middleware: Components that Play Both Sides
+      result = application(environ, start_response)
+      try:
+          for data in result:
+              if data:    # don't send headers until body appears
+                  write(data)
+          if not headers_sent:
+              write('')   # send headers now if body was empty
+      finally:
+          if hasattr(result, 'close'):
+              result.close()
+#+END_SRC
+
+*** Middleware: Components that Play Both Sides
 Note that a single object may play the role of a server with respect to some application(s), while also acting as an application with respect to some server(s). Such "middleware" components can perform such functions as:
 
 Routing a request to different application objects based on the target URL, after rewriting the environ accordingly.
@@ -150,74 +158,77 @@ For the most part, middleware must conform to the restrictions and requirements 
 
 Here is a (tongue-in-cheek) example of a middleware component that converts text/plain responses to pig Latin, using Joe Strout's piglatin.py . (Note: a "real" middleware component would probably use a more robust way of checking the content type, and should also check for a content encoding. Also, this simple example ignores the possibility that a word might be split across a block boundary.)
 
-from piglatin import piglatin
+#+BEGIN_SRC python
+  from piglatin import piglatin
 
-class LatinIter:
+  class LatinIter:
 
-    """Transform iterated output to piglatin, if it's okay to do so
+      """Transform iterated output to piglatin, if it's okay to do so
 
-    Note that the "okayness" can change until the application yields
-    its first non-empty string, so 'transform_ok' has to be a mutable
-    truth value.
-    """
+      Note that the "okayness" can change until the application yields
+      its first non-empty string, so 'transform_ok' has to be a mutable
+      truth value.
+      """
 
-    def __init__(self, result, transform_ok):
-        if hasattr(result, 'close'):
-            self.close = result.close
-        self._next = iter(result).next
-        self.transform_ok = transform_ok
+      def __init__(self, result, transform_ok):
+          if hasattr(result, 'close'):
+              self.close = result.close
+          self._next = iter(result).next
+          self.transform_ok = transform_ok
 
-    def __iter__(self):
-        return self
+      def __iter__(self):
+          return self
 
-    def next(self):
-        if self.transform_ok:
-            return piglatin(self._next())
-        else:
-            return self._next()
+      def next(self):
+          if self.transform_ok:
+              return piglatin(self._next())
+          else:
+              return self._next()
 
-class Latinator:
+  class Latinator:
 
-    # by default, don't transform output
-    transform = False
+      # by default, don't transform output
+      transform = False
 
-    def __init__(self, application):
-        self.application = application
+      def __init__(self, application):
+          self.application = application
 
-    def __call__(self, environ, start_response):
+      def __call__(self, environ, start_response):
 
-        transform_ok = []
+          transform_ok = []
 
-        def start_latin(status, response_headers, exc_info=None):
+          def start_latin(status, response_headers, exc_info=None):
 
-            # Reset ok flag, in case this is a repeat call
-            del transform_ok[:]
+              # Reset ok flag, in case this is a repeat call
+              del transform_ok[:]
 
-            for name, value in response_headers:
-                if name.lower() == 'content-type' and value == 'text/plain':
-                    transform_ok.append(True)
-                    # Strip content-length if present, else it'll be wrong
-                    response_headers = [(name, value)
-                        for name, value in response_headers
-                            if name.lower() != 'content-length'
-                    ]
-                    break
+              for name, value in response_headers:
+                  if name.lower() == 'content-type' and value == 'text/plain':
+                      transform_ok.append(True)
+                      # Strip content-length if present, else it'll be wrong
+                      response_headers = [(name, value)
+                          for name, value in response_headers
+                              if name.lower() != 'content-length'
+                      ]
+                      break
 
-            write = start_response(status, response_headers, exc_info)
+              write = start_response(status, response_headers, exc_info)
 
-            if transform_ok:
-                def write_latin(data):
-                    write(piglatin(data))
-                return write_latin
-            else:
-                return write
+              if transform_ok:
+                  def write_latin(data):
+                      write(piglatin(data))
+                  return write_latin
+              else:
+                  return write
 
-        return LatinIter(self.application(environ, start_latin), transform_ok)
+          return LatinIter(self.application(environ, start_latin), transform_ok)
 
 
-# Run foo_app under a Latinator's control, using the example CGI gateway
-from foo_app import foo_app
-run_with_cgi(Latinator(foo_app))
+  # Run foo_app under a Latinator's control, using the example CGI gateway
+  from foo_app import foo_app
+  run_with_cgi(Latinator(foo_app))
+#+END_SRC
+
 ** TODO Specification Details
 The application object must accept two positional arguments. For the sake of illustration, we have named them environ and start_response , but they are not required to have these names. A server or gateway must invoke the application object using positional (not keyword) arguments. (E.g. by calling result = application(environ, start_response) as shown above.)
 
